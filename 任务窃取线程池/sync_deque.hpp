@@ -29,6 +29,7 @@ public:
 		return val;
 	}
 	inline bool empty() {
+		std::unique_lock<std::mutex>lk(lock_);
 		return true == deque_.empty();
 	}
     inline size_t get_size() {
