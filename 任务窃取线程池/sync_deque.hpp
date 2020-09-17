@@ -6,27 +6,42 @@ class sync_deque final {
 public:
     sync_deque() = default;
 	~sync_deque() = default;
+	inline void set_max_size(int sz) {
+		max_size_ = sz;
+	}
 	void push_front(const T &val) {
 		std::unique_lock<std::mutex>lk(lock_);
+		if (size_ > max_size_) {
+			return;
+		}
 		deque_.push_front(val);
 	}
-    T pop_front() {
-        std::unique_lock<std::mutex>lk(lock_);
-		if (true == deque_.empty()) {
-			return nullptr;
+	void push_front(T &&val) {
+		std::unique_lock<std::mutex>lk(lock_);
+		if (size_ > max_size_) {
+			return;
 		}
-		T val = deque_.front();
-		deque_.pop_front();
-		return val;
+		deque_.push_front(val);
 	}
-	T pop_back() {
+    bool pop_front(T &val) {
         std::unique_lock<std::mutex>lk(lock_);
 		if (true == deque_.empty()) {
-			return nullptr;
+			return false;
 		}
-		T val = deque_.back();
+		val = deque_.front();
+		deque_.pop_front();
+		--size_;
+		return true;
+	}
+	bool pop_back(T &val) {
+        std::unique_lock<std::mutex>lk(lock_);
+		if (true == deque_.empty()) {
+			return false;
+		}
+		val = deque_.back();
 		deque_.pop_back();
-		return val;
+		--size_;
+		return true;
 	}
 	inline bool empty() {
 		std::unique_lock<std::mutex>lk(lock_);
@@ -39,4 +54,6 @@ public:
 private:
 	std::deque<T>deque_;
 	std::mutex lock_;
+	int size_ = 0;
+	int max_size_ = 1024 * 10;
 };

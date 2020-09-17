@@ -9,7 +9,7 @@
 #include "sync_deque.hpp"
 class worker_t;
 using workers_ptr = std::shared_ptr<std::vector<std::shared_ptr<worker_t>>>;
-using task_t = std::function<void()>;
+using task_t = std::function<std::string(const std::string &)>;
 class worker_t final {
 public:
     explicit worker_t(workers_ptr workers, size_t work_num) : workers_(workers) {
@@ -17,14 +17,11 @@ public:
         enabled_ = true;
         thd_ = std::thread(std::bind(&worker_t::execute, this));
     }
-    inline void assign(const task_t &task) {
-        queue_.push_front(task);
+    inline void assign(const task_t &task, const std::string &arg) {
+        queue_.push_front(std::move(make_pair(task, arg)));
     }
     inline bool empty() {
         return true == queue_.empty();
-    }
-    inline task_t steal() {
-        return queue_.pop_back();
     }
     void join() {
         enabled_ = false;
@@ -38,9 +35,11 @@ private:
         int rand_select = rand() % work_num_;
         auto worker = workers_->at(rand_select);
         std::cout << rand_select << " work thread will be selected." << std::endl;
-        auto task = worker->steal();
-        if (nullptr != task) {
-            task();
+        std::pair<task_t, std::string>e;
+        while (worker->queue_.pop_back(e)) {
+            task_t &task = e.first;
+            const std::string &arg = e.second;
+            auto str = std::move(task(arg));
         }
     }
     void execute() {
@@ -51,10 +50,11 @@ private:
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 continue;
             }
-            task_t task = queue_.pop_front();
-			while (task != nullptr) {
-				task();
-				task = queue_.pop_front();
+            std::pair<task_t, std::string>e;
+			while (queue_.pop_front(e)) {
+				task_t &task = e.first;
+                const std::string &arg = e.second;
+                auto str = std::move(task(arg));
 			}
             bool no_task = std::all_of(workers_->begin(), workers_->end(), [] (std::shared_ptr<worker_t> worker) { return worker->empty(); });
             if (true == no_task) {
@@ -70,7 +70,7 @@ private:
     std::thread thd_;
     workers_ptr workers_;
     std::thread::id thread_id_;
-    sync_deque<task_t>queue_;
+    sync_deque<std::pair<task_t, std::string>>queue_;
 };
 class thread_pool {
 public:
@@ -88,9 +88,9 @@ public:
         }
         workers_->clear();
     }
-    inline void add_task(const task_t &task) {
+    inline void add_task(const task_t &task, const std::string &arg) {
         auto worker = get_rand_worker();
-        worker->assign(task);
+        worker->assign(task, arg);
     }
 private:
     inline std::shared_ptr<worker_t> get_rand_worker() {
